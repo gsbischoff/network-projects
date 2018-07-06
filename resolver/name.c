@@ -20,7 +20,7 @@ FormatDNSMessage(struct dns_message_header Header,
 	Header.NumAuthRRs    = htons(Header.NumAuthRRs);
 	Header.NumAdditional = htons(Header.NumAdditional);
 
-	// Make space for header, questions. then call memcpy
+	// Make space for header, questions
 	int Length = sizeof(struct dns_message_header);
 	
 	for(struct dns_question *QuestionPtr = Questions;
@@ -30,15 +30,20 @@ FormatDNSMessage(struct dns_message_header Header,
 	}
 
 	Message = malloc(Length);
-	MsgPtr = Message + sizeof(struct dns_message_header);
 
+	// Fill that space
 	memcpy(Message, &Header, sizeof(struct dns_message_header));
+	MsgPtr = Message + sizeof(struct dns_message_header);
 
 	for(struct dns_question *QuestionPtr = Questions;
 		QuestionPtr; QuestionPtr = QuestionPtr->Next)
 	{
 		memcpy(MsgPtr, QuestionPtr->QNAME, QuestionPtr->QLEN);
-		MsgPtr += QuestionPtr->QLEN + 2*sizeof(short);
+		MsgPtr += QuestionPtr->QLEN;
+
+		((short *)MsgPtr)[0] = htons(QuestionPtr->QTYPE);
+		((short *)MsgPtr)[1] = htons(QuestionPtr->QCLASS);
+		MsgPtr += 2*sizeof(short);
 	}
 
 	struct dns_message Result;
@@ -81,7 +86,6 @@ ConvertToMessageForm(char *HostSource)
 int
 main(int argc, char **argv)
 {
-#if 1
 	int ClientSocket;
 	char *DomainName = 0;
 	unsigned long ServerHost = 0;
@@ -112,6 +116,7 @@ main(int argc, char **argv)
 	if(!DomainName)
 		exit(1);
 
+
 	struct sockaddr_in ServerAddr;
 
 	memset(&ServerAddr, 0, sizeof(ServerAddr));
@@ -126,11 +131,10 @@ main(int argc, char **argv)
 		exit(1);
 
 	// Format our question
-
 	
 	// NOTE: Our machine is *little-endian*, we must swap these values into network order when assigning them
 	//       But we're smart network programmers, we were totally going to do that already
-	
+
 	// Header
 	struct dns_message_header Header = {0};
 	Header.Identifier = 0xABCD;
@@ -150,15 +154,15 @@ main(int argc, char **argv)
 	// Format entire message; Header, then questions
 	// and *change the byte order to network-order*!
 	struct dns_message Message = FormatDNSMessage(Header, &Question);	// Header, then LLs to fields
-	
 
-/*
+/*	Reference message bytes of query for google.com
 	unsigned char boof[] = {0xAA,0xfA,0x1,0,0,1,0,0,0,0,0,0, 
 							6,'g','o','o','g','l','e', 3 ,'c','o','m','\0', //'','','','','',
 							0,1, 
 							0,1};
 */
 
+#if 0
 	sendto(ClientSocket, &Message, Message.Length, 0, (struct sockaddr *) 
 		   &ServerAddr, sizeof(ServerAddr));
 
@@ -226,8 +230,8 @@ main(int argc, char **argv)
 	for(int i = 0; i < 12; ++i)
 		printf("%02x", RBptr[i]);
 
+#endif
 	closesocket(ClientSocket);
 	WSACleanup();
-#endif
 	return(0);
 }
