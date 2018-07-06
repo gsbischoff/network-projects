@@ -145,7 +145,7 @@ main(int argc, char **argv)
 	struct dns_question Question = {0};
 
 	Question.QNAME = ConvertToMessageForm(DomainName);
-	Question.QLEN = strlen(Question.QNAME);
+	Question.QLEN = strlen(Question.QNAME) + 1;
 	Question.QTYPE = 1;
 	Question.QCLASS = 1;
 
@@ -162,16 +162,15 @@ main(int argc, char **argv)
 							0,1};
 */
 
-#if 0
-	sendto(ClientSocket, &Message, Message.Length, 0, (struct sockaddr *) 
+	sendto(ClientSocket, Message.Message, Message.Length, 0, (struct sockaddr *) 
 		   &ServerAddr, sizeof(ServerAddr));
 
 	free(QNBuffer);
 	free(Message.Message);
 
-	//char RecvBuffer[512]; 	/* RFC 1035 p.10: "UDP messages    512 octets or less" */
+	char RecvBuffer[512]; 	/* RFC 1035 p.10: "UDP messages    512 octets or less" */
 	//struct DNSMessageHeader RecvBuffer;
-	unsigned char RecvBuffer[512] = {0};
+	//unsigned char RecvBuffer[512] = {0};
 	struct sockaddr_in FromAddr;
 	int FromLen = sizeof(FromAddr);
 
@@ -180,7 +179,7 @@ main(int argc, char **argv)
 	
 	printf("BytesRecv: %u\nAddr: %s\n", BytesRecv, inet_ntoa(FromAddr.sin_addr));
 
-	if(BytesRecv < sizeof(struct DNSMessageHeader))
+	if(BytesRecv < sizeof(struct dns_message_header))
 	{
 		printf("Error! Recieved %u bytes!\n", BytesRecv);
 		closesocket(ClientSocket);
@@ -188,17 +187,26 @@ main(int argc, char **argv)
 		exit(1);
 	}
 
-	unsigned char *RBptr = (unsigned char *)&RecvBuffer;
-	printf("INITBuffer cont: ");
-	for(int i = 0; i < 12; ++i)
-		printf("%02x", RBptr[i]);
-	struct DNSMessageHeader *Recv = (struct DNSMessageHeader *) RecvBuffer;
-	Recv->Identifier    = ntohs(Recv->Identifier);
-	Recv->Flags         = ntohs(Recv->Flags);
-	Recv->NumQuestions  = ntohs(Recv->NumQuestions);
-	Recv->NumAnswerRRs  = ntohs(Recv->NumAnswerRRs);
-	Recv->NumAuthRRs    = ntohs(Recv->NumAuthRRs);
-	Recv->NumAdditional = ntohs(Recv->NumAdditional);
+
+
+
+
+
+
+
+	
+
+	struct dns_message_header *ResponseHeader;
+	ResponseHeader = (struct dns_message_header *) &RecvBuffer;
+
+	// Change header fields to host byte order
+	ResponseHeader->Identifier    = ntohs(ResponseHeader->Identifier);
+	ResponseHeader->Flags         = ntohs(ResponseHeader->Flags);
+	ResponseHeader->NumQuestions  = ntohs(ResponseHeader->NumQuestions);
+	ResponseHeader->NumAnswerRRs  = ntohs(ResponseHeader->NumAnswerRRs);
+	ResponseHeader->NumAuthRRs    = ntohs(ResponseHeader->NumAuthRRs);
+	ResponseHeader->NumAdditional = ntohs(ResponseHeader->NumAdditional);
+
 	printf("\nIdentifier    %x\n"
 			"Flags:  %x\n"
 			"\tQR      %x\n"
@@ -213,18 +221,19 @@ main(int argc, char **argv)
 			"NumAnswerRRs   %u\n"
 			"NumAuthRRs     %u\n"
 			"NumAdditional  %u\n", 
-			Recv->Identifier, 
-			Recv->Flags,
-				(Recv->Flags >> 15) & 1,
-				(Recv->Flags >> 11) & 0xF, //Opcode,
-				(Recv->Flags >> 10) & 1, //AA,
-				(Recv->Flags >>  9) & 1, //TC,
-				(Recv->Flags >>  8) & 1, //RD,
-				(Recv->Flags >>  7) & 1, //RA,
-				(Recv->Flags >>  4) & 7, //Z,
-				(Recv->Flags >>  0) & 0xF, //RCODE,
-			Recv->NumQuestions, Recv->NumAnswerRRs,
-			Recv->NumAuthRRs, Recv->NumAdditional);
+			ResponseHeader->Identifier, 
+			ResponseHeader->Flags,
+				ResponseHeader->QR,
+				ResponseHeader->OPCODE, //Opcode,
+				ResponseHeader->AA, //AA,
+				ResponseHeader->TC, //TC,
+				ResponseHeader->RD, //RD,
+				ResponseHeader->RA, //RA,
+				ResponseHeader->Z,  //Z,
+				ResponseHeader->RCODE, //RCODE,
+			ResponseHeader->NumQuestions, ResponseHeader->NumAnswerRRs,
+			ResponseHeader->NumAuthRRs, ResponseHeader->NumAdditional);
+#if 0
 	
 	printf("Buffer contents: ");
 	for(int i = 0; i < 12; ++i)
