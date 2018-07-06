@@ -8,20 +8,21 @@ struct dns_message_header
 			#if 1
 			union
 			{
+				// Bitfields begin with LSB
 				struct
 				{
-					unsigned char QR : 1;		/* Specifies whether this message is a query (0), or a response (1) */
-					unsigned char OPCODE : 4;	/* Kind of query */
-					unsigned char AA : 1;		/* Authoritative Answer */
-					unsigned char TC : 1;		/* TrunCation */
-					unsigned char RD : 1;		/* Recursion Desired */
-					unsigned char RA : 1;		/* Recursion Available */
-					unsigned char Z : 3;			/* --- Reserved --- */
 					unsigned char RCODE : 4;		/* Response code */
+					unsigned char Z : 3;			/* --- Reserved --- */
+					unsigned char RA : 1;		/* Recursion Available */
+					unsigned char RD : 1;		/* Recursion Desired */
+					unsigned char TC : 1;		/* TrunCation */
+					unsigned char AA : 1;		/* Authoritative Answer */
+					unsigned char OPCODE : 4;	/* Kind of query */
+					unsigned char QR : 1;		/* Specifies whether this message is a query (0), or a response (1) */
 				};
 				unsigned short Flags;
 			};
-			#elif
+			#else
 			unsigned short Flags;
 			#endif
 			unsigned short NumQuestions;
