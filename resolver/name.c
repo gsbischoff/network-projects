@@ -245,7 +245,7 @@ main(int argc, char **argv)
 	int ResponseLength = BytesRecv;
 	char *Response = RecvBuffer;
 
-	ParseDNSMessage(&Response, ResponseLength);
+	ParseDNSMessage(Response, ResponseLength);
 
 
 
