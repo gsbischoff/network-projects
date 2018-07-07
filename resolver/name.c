@@ -62,38 +62,17 @@ PrintDNSHeader(struct dns_message_header *ResponseHeader)
 }
 
 void
-ParseDNSMessage(char *Response, int ResponseLength)
+ParseDNSMessage(void *Response, int ResponseLength)
 {
-	struct dns_message_header *Header = (struct dns_message_header *)Response;
-
+	struct dns_message_header *Header = Response;
 	DeserializeDNSHeader(Header);
 
-	// Extract fields from question
-	unsigned char *ResponsePtr = Response + sizeof(struct dns_message_header);
-	int QLEN = 0;
+	void *RPtr = Response + sizeof(struct dns_message_header);
 
-	char *QNAME = malloc(1);
-	while(ResponsePtr[0])
-	{
-		int len = ResponsePtr[0];	// Len of label
-		QNAME = realloc(QNAME, QLEN + ResponsePtr[0] + 1);
-	/*	QNAME = realloc(QNAME, QLEN + ResponsePtr[0] + 1); // Label contents + 1 byte
-
-		// Copy that label + 1 byte (.)
-		memcpy(QNAME + QLEN, ResponsePtr + QLEN + 1, QLEN + 1);
-
-		// Advance len to new open space, reflecting our added label.
-		QLEN += ResponsePtr[0] + 1;
-		printf("RP: %u;", ResponsePtr[0]);
-		ResponsePtr += ResponsePtr[0] + 1;
-		QNAME[QLEN] = 0;
-		printf("QNAME, len %u: %s\n", QLEN, QNAME);
-		QNAME[QLEN] = '.';*/
-
-	/*	memcpy(QNAME + QLEN, ResponsePtr + QLEN, ResponsePtr[0]);
-		ResponsePtr += ResponsePtr[0];
-		QLEN += ResponsePtr[0];*/
-	}
+	RPtr = ParseQuestions(RPtr, Header->NumQuestions);
+	RPtr = ParseAnswerRRs(RPtr, Header->NumAnswerRRs);
+	RPtr = ParseAuthRRs(RPtr, Header->NumAuthRRs);
+	RPtr = ParseAdditional(RPtr, Header->NumAdditional);
 
 	short QTYPE, QCLASS;
 }
