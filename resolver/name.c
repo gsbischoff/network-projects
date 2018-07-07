@@ -6,6 +6,67 @@
 
 // gcc -std=c99 name.c -o t -lws2_32
 
+void
+SerializeDNSHeader(struct dns_message_header *Header)
+{
+	// Change header fields to network byte order
+	Header->Identifier    = htons(Header->Identifier);
+	Header->Flags         = htons(Header->Flags);
+	Header->NumQuestions  = htons(Header->NumQuestions);
+	Header->NumAnswerRRs  = htons(Header->NumAnswerRRs);
+	Header->NumAuthRRs    = htons(Header->NumAuthRRs);
+	Header->NumAdditional = htons(Header->NumAdditional);
+}
+
+void
+DeserializeDNSHeader(struct dns_message_header *Header)
+{
+	// Change header fields to host byte order
+	Header->Identifier    = ntohs(Header->Identifier);
+	Header->Flags         = ntohs(Header->Flags);
+	Header->NumQuestions  = ntohs(Header->NumQuestions);
+	Header->NumAnswerRRs  = ntohs(Header->NumAnswerRRs);
+	Header->NumAuthRRs    = ntohs(Header->NumAuthRRs);
+	Header->NumAdditional = ntohs(Header->NumAdditional);
+}
+
+void
+PrintDNSHeader(struct dns_message_header *ResponseHeader)
+{
+	printf("\nIdentifier    %x\n"
+			"Flags:  %x\n"
+			"\tQR      %x\n"
+			"\tOpcode  %x\n"	/* Kind of query */
+			"\tAA      %x\n"	/* Authoritative Answer */
+			"\tTC      %x\n"	/* TrunCation */
+			"\tRD      %x\n"	/* Recursion Desired */
+			"\tRA      %x\n"	/* Recursion Available */
+			"\tZ       %x\n"	/* --- Reserved --- */
+			"\tRCODE   %x\n"	/* Response code */
+			"NumQuestions   %u\n"
+			"NumAnswerRRs   %u\n"
+			"NumAuthRRs     %u\n"
+			"NumAdditional  %u\n", 
+			ResponseHeader->Identifier, 
+			ResponseHeader->Flags,
+				ResponseHeader->QR,
+				ResponseHeader->OPCODE, //Opcode,
+				ResponseHeader->AA, //AA,
+				ResponseHeader->TC, //TC,
+				ResponseHeader->RD, //RD,
+				ResponseHeader->RA, //RA,
+				ResponseHeader->Z,  //Z,
+				ResponseHeader->RCODE, //RCODE,
+			ResponseHeader->NumQuestions, ResponseHeader->NumAnswerRRs,
+			ResponseHeader->NumAuthRRs, ResponseHeader->NumAdditional);
+}
+
+void
+ParseDNSMessage(char *Response, int ResponseLength)
+{
+
+}
+
 struct dns_message
 FormatDNSMessage(struct dns_message_header Header,
 				 struct dns_question *Questions)
@@ -13,12 +74,7 @@ FormatDNSMessage(struct dns_message_header Header,
 	char *Message, *MsgPtr;
 
 	// Serialize header -- change to network-order!
-	Header.Identifier    = htons(Header.Identifier);
-	Header.Flags         = htons(Header.Flags);
-	Header.NumQuestions  = htons(Header.NumQuestions);
-	Header.NumAnswerRRs  = htons(Header.NumAnswerRRs);
-	Header.NumAuthRRs    = htons(Header.NumAuthRRs);
-	Header.NumAdditional = htons(Header.NumAdditional);
+	SerializeDNSHeader(&Header);
 
 	// Make space for header, questions
 	int Length = sizeof(struct dns_message_header);
@@ -174,7 +230,7 @@ main(int argc, char **argv)
 	struct sockaddr_in FromAddr;
 	int FromLen = sizeof(FromAddr);
 
-	int BytesRecv = recvfrom(ClientSocket, (char *) RecvBuffer, 512, 0, (struct sockaddr *)
+	int BytesRecv = recvfrom(ClientSocket, RecvBuffer, 512, 0, (struct sockaddr *)
 							 &FromAddr, &FromLen);
 	
 	printf("BytesRecv: %u\nAddr: %s\n", BytesRecv, inet_ntoa(FromAddr.sin_addr));
@@ -186,53 +242,22 @@ main(int argc, char **argv)
 		WSACleanup();
 		exit(1);
 	}
+	int ResponseLength = BytesRecv;
+	char *Response = RecvBuffer;
+
+	ParseDNSMessage(&Response, ResponseLength);
 
 
 
 
 
 
-
-
-	
 
 	struct dns_message_header *ResponseHeader;
 	ResponseHeader = (struct dns_message_header *) &RecvBuffer;
+	PrintDNSHeader(ResponseHeader);
 
-	// Change header fields to host byte order
-	ResponseHeader->Identifier    = ntohs(ResponseHeader->Identifier);
-	ResponseHeader->Flags         = ntohs(ResponseHeader->Flags);
-	ResponseHeader->NumQuestions  = ntohs(ResponseHeader->NumQuestions);
-	ResponseHeader->NumAnswerRRs  = ntohs(ResponseHeader->NumAnswerRRs);
-	ResponseHeader->NumAuthRRs    = ntohs(ResponseHeader->NumAuthRRs);
-	ResponseHeader->NumAdditional = ntohs(ResponseHeader->NumAdditional);
-
-	printf("\nIdentifier    %x\n"
-			"Flags:  %x\n"
-			"\tQR      %x\n"
-			"\tOpcode  %x\n"	/* Kind of query */
-			"\tAA      %x\n"	/* Authoritative Answer */
-			"\tTC      %x\n"	/* TrunCation */
-			"\tRD      %x\n"	/* Recursion Desired */
-			"\tRA      %x\n"	/* Recursion Available */
-			"\tZ       %x\n"	/* --- Reserved --- */
-			"\tRCODE   %x\n"	/* Response code */
-			"NumQuestions   %u\n"
-			"NumAnswerRRs   %u\n"
-			"NumAuthRRs     %u\n"
-			"NumAdditional  %u\n", 
-			ResponseHeader->Identifier, 
-			ResponseHeader->Flags,
-				ResponseHeader->QR,
-				ResponseHeader->OPCODE, //Opcode,
-				ResponseHeader->AA, //AA,
-				ResponseHeader->TC, //TC,
-				ResponseHeader->RD, //RD,
-				ResponseHeader->RA, //RA,
-				ResponseHeader->Z,  //Z,
-				ResponseHeader->RCODE, //RCODE,
-			ResponseHeader->NumQuestions, ResponseHeader->NumAnswerRRs,
-			ResponseHeader->NumAuthRRs, ResponseHeader->NumAdditional);
+	
 #if 0
 	
 	printf("Buffer contents: ");
