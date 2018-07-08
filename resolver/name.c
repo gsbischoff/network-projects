@@ -61,6 +61,21 @@ PrintDNSHeader(struct dns_message_header *ResponseHeader)
 			ResponseHeader->NumAuthRRs, ResponseHeader->NumAdditional);
 }
 
+void *
+ParseQuestions(void *QuestionStart, short NumQuestions)
+{
+	unsigned char *MemoryPtr = QuestionStart;
+	for(int QuestionIndex = 0;
+		QuestionIndex < NumQuestions;
+		++QuestionIndex)
+	{
+		while(MemoryPtr[0])
+		{
+			
+		}
+	}
+}
+
 void
 ParseDNSMessage(void *Response, int ResponseLength)
 {
