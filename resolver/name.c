@@ -76,18 +76,27 @@ ParseQuestions(void *QuestionStart, short NumQuestions)
 	}
 }
 
+void *
+ParseAnswerRRs(void *QuestionStart, short NumQuestions);
+
+void *
+ParseAuthRRs(void *QuestionStart, short NumQuestions);
+
+void *
+ParseAdditional(void *QuestionStart, short NumQuestions);
+
 void
-ParseDNSMessage(void *Response, int ResponseLength)
+ParseDNSMessage(char *Response, int ResponseLength)
 {
 	struct dns_message_header *Header = Response;
 	DeserializeDNSHeader(Header);
 
-	void *RPtr = Response + sizeof(struct dns_message_header);
+	void *ResponsePtr = Response + sizeof(struct dns_message_header);
 
-	RPtr = ParseQuestions(RPtr, Header->NumQuestions);
-	RPtr = ParseAnswerRRs(RPtr, Header->NumAnswerRRs);
-	RPtr = ParseAuthRRs(RPtr, Header->NumAuthRRs);
-	RPtr = ParseAdditional(RPtr, Header->NumAdditional);
+	ResponsePtr = ParseQuestions(ResponsePtr, Header->NumQuestions);
+	ResponsePtr = ParseAnswerRRs(ResponsePtr, Header->NumAnswerRRs);
+	ResponsePtr = ParseAuthRRs(ResponsePtr, Header->NumAuthRRs);
+	ResponsePtr = ParseAdditional(ResponsePtr, Header->NumAdditional);
 
 	short QTYPE, QCLASS;
 }
@@ -225,9 +234,9 @@ main(int argc, char **argv)
 	// Create a question
 	struct dns_question Question = {0};
 
-	Question.QNAME = ConvertToMessageForm(DomainName);
-	Question.QLEN = strlen(Question.QNAME) + 1;
-	Question.QTYPE = 1;
+	Question.QNAME  = ConvertToMessageForm(DomainName);
+	Question.QLEN   = strlen(Question.QNAME) + 1;
+	Question.QTYPE  = 1;
 	Question.QCLASS = 1;
 
 	char *QNBuffer = Question.QNAME;
