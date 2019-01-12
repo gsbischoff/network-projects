@@ -61,23 +61,173 @@ PrintDNSHeader(struct dns_message_header *ResponseHeader)
 			ResponseHeader->NumAuthRRs, ResponseHeader->NumAdditional);
 }
 
-void *
-ParseQuestions(void *QuestionStart, short NumQuestions)
+int
+PrintDNSName(unsigned char *MessageStart, int Offset)
+{
+    int LabelOffset = Offset;
+    int Jumped = 0;
+    while(MessageStart[LabelOffset])
+    {
+        if(MessageStart[LabelOffset] & 0xc0)
+        {
+            // Has high-order two bits set -> is a pointer
+            unsigned short PointerOffset = ((unsigned short)MessageStart[Offset + 0] << 8) |
+                                           ((unsigned short)MessageStart[Offset + 1] << 0);
+
+            // Before jumping to this label pointer, advance 
+            // 'offset' past the pointer to continue the message
+            Offset = LabelOffset + 2; 
+            LabelOffset = (PointerOffset & 0x3FFF) - sizeof(struct dns_message_header);
+
+            Jumped = 1;
+        }
+        else
+        {
+            printf("%.*s.", MessageStart[LabelOffset], MessageStart + LabelOffset + 1);
+            
+            LabelOffset += MessageStart[LabelOffset] + 1;
+
+            if(!Jumped) Offset = LabelOffset;
+        }
+    }
+
+    return(Offset);
+}
+
+int
+ParseQuestions(unsigned char *QuestionStart, short NumQuestions)
 {
 	unsigned char *MemoryPtr = QuestionStart;
+    unsigned Offset = 0;
 	for(int QuestionIndex = 0;
 		QuestionIndex < NumQuestions;
 		++QuestionIndex)
 	{
-		while(MemoryPtr[0])
-		{
-			
-		}
+        // Print QNAME
+        Offset = PrintDNSName(QuestionStart, Offset);
+        printf("\nprinted name: +%u", Offset);
+
+        ++Offset;
+
+        unsigned short Type;
+        memcpy(&Type, &QuestionStart[Offset], 2);
+        Type = ntohs(Type);
+
+        // Print QTYPE
+        printf("\nQTYPE: %s ", DNSTypeTable[Type]);
+
+        unsigned short Class;
+        memcpy(&Class, &QuestionStart[Offset + 2], 2);
+        Class = ntohs(Class);
+
+        // Print QCLASS
+        printf("\nQCLASS: %s\n", (Class == 1) ? "IN" : "OTHER");
+
+        Offset += 4;
 	}
+
+    return(Offset);
 }
 
-void *
-ParseAnswerRRs(void *QuestionStart, short NumQuestions);
+int
+ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
+{
+    // Print header
+
+    // Name
+    unsigned char *Name = QuestionStart;
+
+    printf("NAME: ");
+    Offset = PrintDNSName(Name, Offset);
+
+    // Type, 
+    unsigned short Type = (Name[Offset++] << 8) |
+                          (Name[Offset++] << 0);
+
+    printf("\nTYPE: %s\n", DNSTypeTable[Type]);
+
+    // Class, 
+    unsigned short Class = (Name[Offset++] << 8) |
+                           (Name[Offset++] << 0);
+
+    printf("CLASS: %s\n", (Type == INET) ? "IN" : "Other");
+    // TTL, 
+    unsigned uTTL = (Name[Offset++] << 24) |
+                    (Name[Offset++] << 16) |
+                    (Name[Offset++] << 8) |
+                    (Name[Offset++] << 0);
+
+    int TTL;
+    memcpy(&TTL, &uTTL, sizeof(int));
+
+    printf("TTL: %d\n", TTL);
+
+    // RDLEN, 
+    unsigned short RDLEN = (Name[Offset++] << 8) |
+                           (Name[Offset++] << 0);
+
+    printf("RDLEN: %u\n", RDLEN);
+
+    // RDATA
+    switch(Type)
+    {
+        case A:
+        {
+            struct in_addr Address;
+            Address.s_addr = *(ULONG *)&Name[Offset];
+
+            printf("Address: %s\n", inet_ntoa(Address));
+
+
+        } break;
+        case NS:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+
+        case CNAME:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case SOA:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+
+        case WKS:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case PTR:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case HINFO:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case MINFO:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case MX:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+        case TXT:
+        {
+            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+        } break;
+
+        default:
+        {
+
+        } break;
+    }
+
+    Offset += RDLEN;
+    return(Offset);
+}
 
 void *
 ParseAuthRRs(void *QuestionStart, short NumQuestions);
@@ -86,17 +236,30 @@ void *
 ParseAdditional(void *QuestionStart, short NumQuestions);
 
 void
-ParseDNSMessage(char *Response, int ResponseLength)
+PrintDNSMessage(char *Response, int ResponseLength)
 {
-	struct dns_message_header *Header = Response;
-	DeserializeDNSHeader(Header);
+	struct dns_message_header Header;
+    memcpy(&Header, Response, sizeof(struct dns_message_header));
+	DeserializeDNSHeader(&Header);
 
 	void *ResponsePtr = Response + sizeof(struct dns_message_header);
+    unsigned Offset;
 
-	ResponsePtr = ParseQuestions(ResponsePtr, Header->NumQuestions);
-	ResponsePtr = ParseAnswerRRs(ResponsePtr, Header->NumAnswerRRs);
-	ResponsePtr = ParseAuthRRs(ResponsePtr, Header->NumAuthRRs);
-	ResponsePtr = ParseAdditional(ResponsePtr, Header->NumAdditional);
+    PrintDNSHeader(&Header);
+
+    printf("------- DNS Message -------\n");
+    printf("---------------------------\n\n");
+
+    printf("-------- Questions --------\n");
+	Offset = ParseQuestions(ResponsePtr, Header.NumQuestions);
+    printf("+%u", Offset + 12);
+
+    printf("\n--------- Answers ---------\n");
+	Offset = ParseAnswerRRs(ResponsePtr, Offset, Header.NumAnswerRRs);
+    
+    printf("+%u", Offset + 12);
+	//ResponsePtr = ParseAuthRRs(ResponsePtr, Header.NumAuthRRs);
+	//ResponsePtr = ParseAdditional(ResponsePtr, Header.NumAdditional);
 
 	short QTYPE, QCLASS;
 }
@@ -110,9 +273,10 @@ FormatDNSMessage(struct dns_message_header Header,
 	// Serialize header -- change to network-order!
 	SerializeDNSHeader(&Header);
 
-	// Make space for header, questions
+	// Make space for header
 	int Length = sizeof(struct dns_message_header);
 	
+    // -- questions
 	for(struct dns_question *QuestionPtr = Questions;
 		QuestionPtr; QuestionPtr = QuestionPtr->Next)
 	{
@@ -143,22 +307,32 @@ FormatDNSMessage(struct dns_message_header Header,
 	return Result;
 }
 
+// labels          63 octets or less
+// names           255 octets or less
+
 char *
 ConvertToMessageForm(char *HostSource)
 {
 	int len = strlen(HostSource);
-	char *Result = malloc(len + 2);
+	static char Result[256] = {0}; // = malloc(len + 2);
 
-	if(len == 0)
-		return 0;
+	if(!HostSource[0]) return 0;
 
 	Result[0] = '.';
+    memcpy(Result + 1, HostSource, len + 1);
+    /*
 	for(int Index = 0;
 		Index < len + 1;
 		++Index)
-		Result[Index + 1] = HostSource[Index];
+		Result[Index + 1] = HostSource[Index]; */
 
-	int LabelIndex = 0;
+    /*
+        biconditional:
+          char A, B
+          C = ~(A XOR B)
+    */
+
+	unsigned char LabelIndex = 0;
 	for(char *ptr = Result;
 		*ptr; ptr += LabelIndex + 1)
 	{
@@ -206,7 +380,6 @@ main(int argc, char **argv)
 	if(!DomainName)
 		exit(1);
 
-
 	struct sockaddr_in ServerAddr;
 
 	memset(&ServerAddr, 0, sizeof(ServerAddr));
@@ -233,13 +406,10 @@ main(int argc, char **argv)
 
 	// Create a question
 	struct dns_question Question = {0};
-
 	Question.QNAME  = ConvertToMessageForm(DomainName);
 	Question.QLEN   = strlen(Question.QNAME) + 1;
-	Question.QTYPE  = 1;
-	Question.QCLASS = 1;
-
-	char *QNBuffer = Question.QNAME;
+	Question.QTYPE  = A;
+	Question.QCLASS = INET;
 
 	// Format entire message; Header, then questions
 	// and *change the byte order to network-order*!
@@ -255,7 +425,6 @@ main(int argc, char **argv)
 	sendto(ClientSocket, Message.Message, Message.Length, 0, (struct sockaddr *) 
 		   &ServerAddr, sizeof(ServerAddr));
 
-	free(QNBuffer);
 	free(Message.Message);
 
 	char RecvBuffer[512]; 	/* RFC 1035 p.10: "UDP messages    512 octets or less" */
@@ -264,7 +433,7 @@ main(int argc, char **argv)
 	struct sockaddr_in FromAddr;
 	int FromLen = sizeof(FromAddr);
 
-	int BytesRecv = recvfrom(ClientSocket, RecvBuffer, 512, 0, (struct sockaddr *)
+	int BytesRecv = recvfrom(ClientSocket, RecvBuffer, sizeof(RecvBuffer), 0, (struct sockaddr *)
 							 &FromAddr, &FromLen);
 	
 	printf("BytesRecv: %u\nAddr: %s\n", BytesRecv, inet_ntoa(FromAddr.sin_addr));
@@ -276,20 +445,63 @@ main(int argc, char **argv)
 		WSACleanup();
 		exit(1);
 	}
-	int ResponseLength = BytesRecv;
-	char *Response = RecvBuffer;
 
-	ParseDNSMessage(Response, ResponseLength);
+	PrintDNSMessage(RecvBuffer, BytesRecv);
 
 
+/*
+7.3. Processing responses
 
+The first step in processing arriving response datagrams is to parse the
+response.  This procedure should include:
+
+   - Check the header for reasonableness.  Discard datagrams which
+     are queries when responses are expected.
+
+   - Parse the sections of the message, and insure that all RRs are
+     correctly formatted.
+
+   - As an optional step, check the TTLs of arriving data looking
+     for RRs with excessively long TTLs.  If a RR has an
+     excessively long TTL, say greater than 1 week, either discard
+     the whole response, or limit all TTLs in the response to 1
+     week.
+
+The next step is to match the response to a current resolver request.
+The recommended strategy is to do a preliminary matching using the ID
+field in the domain header, and then to verify that the question section
+corresponds to the information currently desired.  This requires that
+the transmission algorithm devote several bits of the domain ID field to
+a request identifier of some sort.  This step has several fine points:
+
+   - Some name servers send their responses from different
+     addresses than the one used to receive the query.  That is, a
+     resolver cannot rely that a response will come from the same
+     address which it sent the corresponding query to.  This name
+     server bug is typically encountered in UNIX systems.
+
+   - If the resolver retransmits a particular request to a name
+     server it should be able to use a response from any of the
+     transmissions.  However, if it is using the response to sample
+     the round trip time to access the name server, it must be able
+     to determine which transmission matches the response (and keep
+     transmission times for each outgoing message), or only
+     calculate round trip times based on initial transmissions.
+
+   - A name server will occasionally not have a current copy of a
+     zone which it should have according to some NS RRs.  The
+     resolver should simply remove the name server from the current
+     SLIST, and continue.
+
+
+*/
 
 
 
 
 	struct dns_message_header *ResponseHeader;
 	ResponseHeader = (struct dns_message_header *) &RecvBuffer;
-	PrintDNSHeader(ResponseHeader);
+	//PrintDNSHeader(ResponseHeader);
 
 	
 #if 0
