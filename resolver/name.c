@@ -177,38 +177,127 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
             Address.s_addr = *(ULONG *)&Name[Offset];
 
             printf("Address: %s\n", inet_ntoa(Address));
-
-
         } break;
         case NS:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            printf("NS: ");
+            Offset = PrintDNSName(Name, Offset);
         } break;
 
         case CNAME:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            printf("CNAME: ");
+            Offset = PrintDNSName(Name, Offset);
         } break;
         case SOA:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            printf("MNAME: ");
+            Offset = PrintDNSName(Name, Offset);
+
+            printf("RNAME: ");
+            Offset = PrintDNSName(Name, Offset);
+
+            unsigned Serial = (Name[Offset++] << 24) |
+                              (Name[Offset++] << 16) |
+                              (Name[Offset++] << 8) |
+                              (Name[Offset++] << 0);
+
+            unsigned Refresh = (Name[Offset++] << 24) |
+                               (Name[Offset++] << 16) |
+                               (Name[Offset++] << 8) |
+                               (Name[Offset++] << 0);
+
+            unsigned Retry = (Name[Offset++] << 24) |
+                             (Name[Offset++] << 16) |
+                             (Name[Offset++] << 8) |
+                             (Name[Offset++] << 0);
+
+            unsigned Expire = (Name[Offset++] << 24) |
+                              (Name[Offset++] << 16) |
+                              (Name[Offset++] << 8) |
+                              (Name[Offset++] << 0);
+
+            unsigned Minimum = (Name[Offset++] << 24) |
+                               (Name[Offset++] << 16) |
+                               (Name[Offset++] << 8) |
+                               (Name[Offset++] << 0);
+
+            printf("Serial: %u\n", Serial);
+            printf("Refresh: %u\n", Refresh);
+            printf("Retry: %u\n", Retry);
+            printf("Expire: %u\n", Expire);
+            printf("Minimum: %u\n", Minimum);
         } break;
 
         case WKS:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            struct in_addr Address;
+            Address.s_addr = *(ULONG *)&Name[Offset];
+
+            printf("Address: %s\n", inet_ntoa(Address));
+
+            unsigned char Protocol = Name[Offset + 4];
+
+            printf("Protocol %s: %s", 
+                (!DNSProtocolTable[Protocol].Keyword) ? "UNASSIGNED" : DNSProtocolTable[Protocol].Keyword,
+                (!DNSProtocolTable[Protocol].Description) ? "Unassigned" : DNSProtocolTable[Protocol].Description);
+
+            unsigned char *Bitmap = &Name[Offset + 5];
+            int Length = RDLEN - 5;
+
+            for(int ByteIndex = 0;
+                ByteIndex < Length;
+                ++ByteIndex)
+            {
+                for(int Bit = 1;
+                    Bit <= 8;
+                    ++Bit)
+                {
+                    if(Bitmap[ByteIndex] & (0x100 >> Bit))
+                    {
+                        // (Byte + Bit)th bit set set
+                        int BitsetIndex = ByteIndex + Bit;
+                        struct port_descriptor PortInfo = {0};
+                        
+                        if(BitsetIndex < ArrayCount(DNSPortTable))
+                            PortInfo = DNSPortTable[BitsetIndex];
+
+                        printf("Protocol %s: %s", 
+                            (!PortInfo.Keyword) ? "UNASSIGNED" : PortInfo.Keyword,
+                            (!PortInfo.Description) ? "Unassigned" : PortInfo.Description);
+                    }
+                }
+            }
         } break;
         case PTR:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            printf("PTR: ");
+            Offset = PrintDNSName(Name, Offset);
         } break;
         case HINFO:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            int Begin = Offset;
+            printf("CPU: ");
+            while(Offset - Begin < RDLEN)
+            {
+                printf("\"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
+                Offset += Name[Offset];
+            }
+
+            printf("OS: ");
+            while(Offset - Begin < RDLEN)
+            {
+                printf("\"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
+                Offset += Name[Offset];
+            }
         } break;
         case MINFO:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            printf("RMAILBX: ");
+            Offset = PrintDNSName(Name, Offset);
+
+            printf("EMAILBX: ");
+            Offset = PrintDNSName(Name, Offset);
         } break;
         case MX:
         {
@@ -216,12 +305,17 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
         } break;
         case TXT:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            int Begin = Offset;
+            while(Offset - Begin < RDLEN)
+            {
+                printf("TXT: \"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
+                Offset += Name[Offset];
+            }
         } break;
 
         default:
         {
-
+            printf("Unrecognized RR!\n");
         } break;
     }
 
@@ -320,11 +414,6 @@ ConvertToMessageForm(char *HostSource)
 
 	Result[0] = '.';
     memcpy(Result + 1, HostSource, len + 1);
-    /*
-	for(int Index = 0;
-		Index < len + 1;
-		++Index)
-		Result[Index + 1] = HostSource[Index]; */
 
     /*
         biconditional:
