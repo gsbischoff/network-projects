@@ -94,22 +94,46 @@ PrintDNSName(unsigned char *MessageStart, int Offset)
     return(Offset);
 }
 
+unsigned short
+ConsumeShort(unsigned char *Buffer, int *Offset)
+{
+    int I = *Offset;
+    unsigned short Result = 
+                      (Buffer[I++] << 8) |
+                      (Buffer[I++] << 0);
+
+    *Offset = I;
+    return(Result);
+}
+
+unsigned
+ConsumeLong(unsigned char *Buffer, int *Offset)
+{
+    int I = *Offset;
+    unsigned Result = (Buffer[I++] << 24) |
+                      (Buffer[I++] << 16) |
+                      (Buffer[I++] << 8) |
+                      (Buffer[I++] << 0);
+
+    *Offset = I;
+    return(Result);
+}
+
 int
 ParseQuestions(unsigned char *QuestionStart, short NumQuestions)
 {
 	unsigned char *MemoryPtr = QuestionStart;
-    unsigned Offset = 0;
+    unsigned Offset = sizeof(struct dns_message_header);
 	for(int QuestionIndex = 0;
 		QuestionIndex < NumQuestions;
 		++QuestionIndex)
 	{
         // Print QNAME
         Offset = PrintDNSName(QuestionStart, Offset);
-        printf("\nprinted name: +%u", Offset);
 
         ++Offset;
 
-        unsigned short Type;
+        unsigned short Type; // = ConsumeShort(&QuestionStart[Offset], &Offset);
         memcpy(&Type, &QuestionStart[Offset], 2);
         Type = ntohs(Type);
 
@@ -121,7 +145,7 @@ ParseQuestions(unsigned char *QuestionStart, short NumQuestions)
         Class = ntohs(Class);
 
         // Print QCLASS
-        printf("\nQCLASS: %s\n", (Class == 1) ? "IN" : "OTHER");
+        printf("\nQCLASS: %s (%u)\n", (Class == 1) ? "IN" : "OTHER", Class);
 
         Offset += 4;
 	}
@@ -130,98 +154,43 @@ ParseQuestions(unsigned char *QuestionStart, short NumQuestions)
 }
 
 int
-ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
+PrintRDATA(int Type, int RDLEN, unsigned char *Base, int Offset)
 {
-    // Print header
-
-    // Name
-    unsigned char *Name = QuestionStart;
-
-    printf("NAME: ");
-    Offset = PrintDNSName(Name, Offset);
-
-    // Type, 
-    unsigned short Type = (Name[Offset++] << 8) |
-                          (Name[Offset++] << 0);
-
-    printf("\nTYPE: %s\n", DNSTypeTable[Type]);
-
-    // Class, 
-    unsigned short Class = (Name[Offset++] << 8) |
-                           (Name[Offset++] << 0);
-
-    printf("CLASS: %s\n", (Type == INET) ? "IN" : "Other");
-    // TTL, 
-    unsigned uTTL = (Name[Offset++] << 24) |
-                    (Name[Offset++] << 16) |
-                    (Name[Offset++] << 8) |
-                    (Name[Offset++] << 0);
-
-    int TTL;
-    memcpy(&TTL, &uTTL, sizeof(int));
-
-    printf("TTL: %d\n", TTL);
-
-    // RDLEN, 
-    unsigned short RDLEN = (Name[Offset++] << 8) |
-                           (Name[Offset++] << 0);
-
-    printf("RDLEN: %u\n", RDLEN);
-
-    // RDATA
     switch(Type)
     {
         case A:
         {
             struct in_addr Address;
-            Address.s_addr = *(ULONG *)&Name[Offset];
+            Address.s_addr = *(ULONG *)&Base[Offset];
 
             printf("Address: %s\n", inet_ntoa(Address));
         } break;
         case NS:
         {
             printf("NS: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
         } break;
 
         case CNAME:
         {
             printf("CNAME: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
         } break;
         case SOA:
         {
             printf("MNAME: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
 
-            printf("RNAME: ");
-            Offset = PrintDNSName(Name, Offset);
+            printf("\nRNAME: ");
+            Offset = PrintDNSName(Base, Offset);
 
-            unsigned Serial = (Name[Offset++] << 24) |
-                              (Name[Offset++] << 16) |
-                              (Name[Offset++] << 8) |
-                              (Name[Offset++] << 0);
+            unsigned Serial  = ConsumeLong(Base, &Offset);
+            unsigned Refresh = ConsumeLong(Base, &Offset);
+            unsigned Retry   = ConsumeLong(Base, &Offset);
+            unsigned Expire  = ConsumeLong(Base, &Offset);
+            unsigned Minimum = ConsumeLong(Base, &Offset);
 
-            unsigned Refresh = (Name[Offset++] << 24) |
-                               (Name[Offset++] << 16) |
-                               (Name[Offset++] << 8) |
-                               (Name[Offset++] << 0);
-
-            unsigned Retry = (Name[Offset++] << 24) |
-                             (Name[Offset++] << 16) |
-                             (Name[Offset++] << 8) |
-                             (Name[Offset++] << 0);
-
-            unsigned Expire = (Name[Offset++] << 24) |
-                              (Name[Offset++] << 16) |
-                              (Name[Offset++] << 8) |
-                              (Name[Offset++] << 0);
-
-            unsigned Minimum = (Name[Offset++] << 24) |
-                               (Name[Offset++] << 16) |
-                               (Name[Offset++] << 8) |
-                               (Name[Offset++] << 0);
-
+            printf("\n");
             printf("Serial: %u\n", Serial);
             printf("Refresh: %u\n", Refresh);
             printf("Retry: %u\n", Retry);
@@ -232,17 +201,17 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
         case WKS:
         {
             struct in_addr Address;
-            Address.s_addr = *(ULONG *)&Name[Offset];
+            Address.s_addr = *(ULONG *)&Base[Offset];
 
             printf("Address: %s\n", inet_ntoa(Address));
 
-            unsigned char Protocol = Name[Offset + 4];
+            unsigned char Protocol = Base[Offset + 4];
 
             printf("Protocol %s: %s", 
                 (!DNSProtocolTable[Protocol].Keyword) ? "UNASSIGNED" : DNSProtocolTable[Protocol].Keyword,
                 (!DNSProtocolTable[Protocol].Description) ? "Unassigned" : DNSProtocolTable[Protocol].Description);
 
-            unsigned char *Bitmap = &Name[Offset + 5];
+            unsigned char *Bitmap = &Base[Offset + 5];
             int Length = RDLEN - 5;
 
             for(int ByteIndex = 0;
@@ -263,8 +232,8 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
                             PortInfo = DNSPortTable[BitsetIndex];
 
                         printf("Protocol %s: %s", 
-                            (!PortInfo.Keyword) ? "UNASSIGNED" : PortInfo.Keyword,
-                            (!PortInfo.Description) ? "Unassigned" : PortInfo.Description);
+                            (!PortInfo.Keyword ? "UNASSIGNED" : PortInfo.Keyword),
+                            (!PortInfo.Description ? "Unassigned" : PortInfo.Description));
                     }
                 }
             }
@@ -272,7 +241,7 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
         case PTR:
         {
             printf("PTR: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
         } break;
         case HINFO:
         {
@@ -280,54 +249,118 @@ ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
             printf("CPU: ");
             while(Offset - Begin < RDLEN)
             {
-                printf("\"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
-                Offset += Name[Offset];
+                printf("\"%*.s\"\n", Base[Offset], &Base[Offset + 1]);
+                Offset += Base[Offset];
             }
 
             printf("OS: ");
             while(Offset - Begin < RDLEN)
             {
-                printf("\"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
-                Offset += Name[Offset];
+                printf("\"%*.s\"\n", Base[Offset], &Base[Offset + 1]);
+                Offset += Base[Offset];
             }
         } break;
         case MINFO:
         {
             printf("RMAILBX: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
 
             printf("EMAILBX: ");
-            Offset = PrintDNSName(Name, Offset);
+            Offset = PrintDNSName(Base, Offset);
         } break;
         case MX:
         {
-            printf("TXT: \"%*.s\"\n", RDLEN, &Name[Offset]);
+            unsigned short Preference = (Base[Offset++] << 8) |
+                                        (Base[Offset++] << 0);
+            
+            printf("Preference: %u\n", Preference);
+
+            printf("Exchange: ");
+            Offset = PrintDNSName(Base, Offset);
         } break;
         case TXT:
         {
             int Begin = Offset;
             while(Offset - Begin < RDLEN)
             {
-                printf("TXT: \"%*.s\"\n", Name[Offset], &Name[Offset + 1]);
-                Offset += Name[Offset];
+                printf("TXT: \"%*.s\"\n", Base[Offset], &Base[Offset + 1]);
+                Offset += Base[Offset];
+            }
+        } break;
+
+        case GPOS:
+        {
+            printf("Long: %*.s\n", Base[Offset], &Base[Offset + 1]); Offset += Base[Offset];
+            printf("Lat:  %*.s\n", Base[Offset], &Base[Offset + 1]); Offset += Base[Offset]; 
+            printf("Alt:  %*.s\n", Base[Offset], &Base[Offset + 1]); Offset += Base[Offset];
+        } break;
+        case AAAA:
+        {
+            printf("Address: ");
+            for(int Byte = 0;
+                Byte < 16;
+                Byte += 2)
+            {
+                printf("%02x%02x", Base[Offset + Byte], Base[Offset + Byte + 1]);
+                printf("%s", (Byte == 14 ? "\n" : ":"));
             }
         } break;
 
         default:
         {
-            printf("Unrecognized RR!\n");
+            printf("Unrecognized RR! Type no: %u\n", Type);
         } break;
     }
 
-    Offset += RDLEN;
     return(Offset);
 }
 
-void *
-ParseAuthRRs(void *QuestionStart, short NumQuestions);
+int
+ParseAnswerRRs(void *QuestionStart, int Offset, short NumQuestions)
+{
+    for(int QuestionIndex = 0;
+        QuestionIndex < NumQuestions;
+        ++QuestionIndex)
+    {
+        // Print header
+        // Name
+        unsigned char *Name = QuestionStart;
 
-void *
-ParseAdditional(void *QuestionStart, short NumQuestions);
+        printf("NAME: ");
+        Offset = PrintDNSName(Name, Offset);
+
+        // Type, 
+        unsigned short Type = ConsumeShort(Name, &Offset);
+
+        printf("\nTYPE: %s\n", DNSTypeTable[Type]);
+
+        // Class, 
+        unsigned short Class = ConsumeShort(Name, &Offset);
+
+        printf("CLASS: %s (%u)\n", (Class == INET) ? "IN" : "Other", Class);
+        // TTL, 
+        unsigned uTTL = ConsumeLong(Name, &Offset);
+
+        int TTL;
+        memcpy(&TTL, &uTTL, sizeof(int));
+
+        printf("TTL: %d\n", TTL);
+
+        // RDLEN, 
+        unsigned short RDLEN = (Name[Offset++] << 8) |
+                               (Name[Offset++] << 0);
+
+        printf("RDLEN: %u\n", RDLEN);
+
+        // RDATA
+        Offset = PrintRDATA(Type, RDLEN, Name, Offset);
+        
+        printf("--\n");
+
+        Offset += RDLEN;
+    }
+    return(Offset);
+}
 
 void
 PrintDNSMessage(char *Response, int ResponseLength)
@@ -336,7 +369,6 @@ PrintDNSMessage(char *Response, int ResponseLength)
     memcpy(&Header, Response, sizeof(struct dns_message_header));
 	DeserializeDNSHeader(&Header);
 
-	void *ResponsePtr = Response + sizeof(struct dns_message_header);
     unsigned Offset;
 
     PrintDNSHeader(&Header);
@@ -345,15 +377,30 @@ PrintDNSMessage(char *Response, int ResponseLength)
     printf("---------------------------\n\n");
 
     printf("-------- Questions --------\n");
-	Offset = ParseQuestions(ResponsePtr, Header.NumQuestions);
+	Offset = ParseQuestions(Response, Header.NumQuestions);
     printf("+%u", Offset + 12);
 
-    printf("\n--------- Answers ---------\n");
-	Offset = ParseAnswerRRs(ResponsePtr, Offset, Header.NumAnswerRRs);
-    
-    printf("+%u", Offset + 12);
-	//ResponsePtr = ParseAuthRRs(ResponsePtr, Header.NumAuthRRs);
-	//ResponsePtr = ParseAdditional(ResponsePtr, Header.NumAdditional);
+    if(Header.NumAnswerRRs > 0)
+    {
+        printf("\n--------- Answers ---------\n");
+        Offset = ParseAnswerRRs(Response, Offset, Header.NumAnswerRRs);
+        
+        printf("+%u", Offset + 12);
+    }
+    if(Header.NumAuthRRs > 0)
+    {
+        printf("\n--------- AuthRRs ---------\n");
+        Offset = ParseAnswerRRs(Response, Offset, Header.NumAuthRRs);
+        
+        printf("+%u", Offset + 12);
+    }
+    if(Header.NumAdditional > 0)
+    {
+        printf("\n-------- Additional -------\n");
+        Offset = ParseAnswerRRs(Response, Offset, Header.NumAdditional);
+        
+        printf("+%u", Offset + 12);
+    }
 
 	short QTYPE, QCLASS;
 }
@@ -435,6 +482,35 @@ ConvertToMessageForm(char *HostSource)
 	return Result;
 }
 
+int
+StringToQueryType(char *String)
+{
+    for(int Index = 0;
+        Index < ArrayCount(DNSTypeTable);
+        ++Index)
+    {
+        char *TableEntry;
+        if(DNSTypeTable[Index])
+        {
+            TableEntry = DNSTypeTable[Index];
+
+            if(strlen(TableEntry) == strlen(String))
+            {
+                for(int EntryIndex = 0;
+                    EntryIndex < strlen(TableEntry);
+                    ++EntryIndex)
+                {
+                    int Diff = TableEntry[EntryIndex] - String[EntryIndex];
+                    if(!(Diff == 0 || Diff == 'A' - 'a' || Diff == 'a' - 'A')) break;
+
+                    if(EntryIndex == strlen(TableEntry) - 1) return(Index);
+                }
+            }
+        }
+    }
+
+    return(1);
+}
 
 int
 main(int argc, char **argv)
@@ -442,6 +518,7 @@ main(int argc, char **argv)
 	int ClientSocket;
 	char *DomainName = 0;
 	unsigned long ServerHost = 0;
+    int QueryType = A;
 
 	if(argc >= 3 && (argc % 2) == 1)
 	{
@@ -457,6 +534,9 @@ main(int argc, char **argv)
 					case 's':
 						ServerHost = inet_addr(argv[Index + 1]);
 						break;
+                    case 'q':
+                        QueryType = StringToQueryType(argv[Index + 1]);
+                        break;
 					default:
 						break;
 				}
@@ -497,19 +577,12 @@ main(int argc, char **argv)
 	struct dns_question Question = {0};
 	Question.QNAME  = ConvertToMessageForm(DomainName);
 	Question.QLEN   = strlen(Question.QNAME) + 1;
-	Question.QTYPE  = A;
+	Question.QTYPE  = QueryType;
 	Question.QCLASS = INET;
 
 	// Format entire message; Header, then questions
 	// and *change the byte order to network-order*!
 	struct dns_message Message = FormatDNSMessage(Header, &Question);	// Header, then LLs to fields
-
-/*	Reference message bytes of query for google.com
-	unsigned char boof[] = {0xAA,0xfA,0x1,0,0,1,0,0,0,0,0,0, 
-							6,'g','o','o','g','l','e', 3 ,'c','o','m','\0', //'','','','','',
-							0,1, 
-							0,1};
-*/
 
 	sendto(ClientSocket, Message.Message, Message.Length, 0, (struct sockaddr *) 
 		   &ServerAddr, sizeof(ServerAddr));
@@ -536,57 +609,6 @@ main(int argc, char **argv)
 	}
 
 	PrintDNSMessage(RecvBuffer, BytesRecv);
-
-
-/*
-7.3. Processing responses
-
-The first step in processing arriving response datagrams is to parse the
-response.  This procedure should include:
-
-   - Check the header for reasonableness.  Discard datagrams which
-     are queries when responses are expected.
-
-   - Parse the sections of the message, and insure that all RRs are
-     correctly formatted.
-
-   - As an optional step, check the TTLs of arriving data looking
-     for RRs with excessively long TTLs.  If a RR has an
-     excessively long TTL, say greater than 1 week, either discard
-     the whole response, or limit all TTLs in the response to 1
-     week.
-
-The next step is to match the response to a current resolver request.
-The recommended strategy is to do a preliminary matching using the ID
-field in the domain header, and then to verify that the question section
-corresponds to the information currently desired.  This requires that
-the transmission algorithm devote several bits of the domain ID field to
-a request identifier of some sort.  This step has several fine points:
-
-   - Some name servers send their responses from different
-     addresses than the one used to receive the query.  That is, a
-     resolver cannot rely that a response will come from the same
-     address which it sent the corresponding query to.  This name
-     server bug is typically encountered in UNIX systems.
-
-   - If the resolver retransmits a particular request to a name
-     server it should be able to use a response from any of the
-     transmissions.  However, if it is using the response to sample
-     the round trip time to access the name server, it must be able
-     to determine which transmission matches the response (and keep
-     transmission times for each outgoing message), or only
-     calculate round trip times based on initial transmissions.
-
-   - A name server will occasionally not have a current copy of a
-     zone which it should have according to some NS RRs.  The
-     resolver should simply remove the name server from the current
-     SLIST, and continue.
-
-
-*/
-
-
-
 
 	struct dns_message_header *ResponseHeader;
 	ResponseHeader = (struct dns_message_header *) &RecvBuffer;

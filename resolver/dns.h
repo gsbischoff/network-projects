@@ -18,6 +18,9 @@ enum dns_type
     MX    = 15, // mail exchange
     TXT   = 16, // text strings
 
+    GPOS  = 27, // Geographical Position
+    AAAA  = 28, // IPv6 host address
+
  // QTYPE
     Q_AXFR  = 252, // A request for a transfer of an entire zone
     Q_MAILB = 253, // A request for mailbox-related records (MB, MG or MR)
@@ -44,11 +47,24 @@ static char *DNSTypeTable[] =
     [15] = "MX", // mail exchange
     [16] = "TXT", // text strings
 
+    [27] = "GPOS", // Geographical Position
+    [28] = "AAAA", // IPv6 host address
+
  // QTYPE
     [252] = "Q_AXFR", // A request for a transfer of an entire zone
     [253] = "Q_MAILB", // A request for mailbox-related records (MB, MG or MR)
     [254] = "Q_MAILA", // A request for mail agent RRs (Obsolete - see MX)
     [255] = "Q_ANY",
+};
+
+static char *RCODETable[16] =
+{
+    [0] = "No error",
+    [1] = "Format error",
+    [2] = "Server failure",
+    [3] = "Name Error",
+    [4] = "Not Implemented",
+    [5] = "Refused",
 };
 
 struct port_descriptor 
